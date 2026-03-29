@@ -162,8 +162,7 @@ function generateProblem({ level, operations }) {
         answer = a * b;
         break;
       default:
-        answer = a + b;
-        break;
+        throw new Error(`Unsupported operation: ${op}`);
     }
   }
 
