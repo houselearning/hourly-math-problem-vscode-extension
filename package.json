@@ -1,16 +1,54 @@
 {
   "name": "hourly-math-code",
   "displayName": "Hourly Math Code",
-  "description": "Every hour, get a HouseLearning math challenge with audio, toast, and terminal interaction.",
-  "version": "0.0.1",
+  "description": "HouseLearning Hourly Math Code: periodic math challenges with audio, toast, and terminal interaction.",
+  "version": "0.1.0",
   "publisher": "houselearning",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "activationEvents": ["*"],
+  "categories": [
+    "Education"
+  ],
+  "activationEvents": [
+    "*"
+  ],
   "main": "./extension.js",
-  "contributes": {},
+  "contributes": {
+    "configuration": {
+      "title": "Hourly Math Code",
+      "properties": {
+        "hourlyMathCode.intervalMinutes": {
+          "type": "number",
+          "default": 60,
+          "minimum": 1,
+          "maximum": 75,
+          "description": "Minutes between math problems (1–75)."
+        },
+        "hourlyMathCode.mathLevel": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Math difficulty level (1–5) powered by HL‑VSMathEngine."
+        },
+        "hourlyMathCode.operations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["+", "-", "x", "/"]
+          },
+          "default": ["+", "-", "x", "/"],
+          "description": "Operations to include in problems."
+        }
+      }
+    }
+  },
   "scripts": {
-    "package": "vsce package"
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "vsce": "^3.0.0"
   }
 }
