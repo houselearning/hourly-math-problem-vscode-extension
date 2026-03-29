@@ -1,149 +1,87 @@
 const vscode = require("vscode");
-const path = require("path");
 
-let intervalHandle = null;
+// -----------------------------
+// AUDIO ENGINE (Webview)
+// -----------------------------
+let audioPanel = null;
 
-function activate(context) {
-  console.log("Hourly Math Code activated.");
+function ensureAudioPanel(context) {
+  if (audioPanel) return audioPanel;
 
-  const terminal = vscode.window.createTerminal("Hourly Math Code");
-
-  const runWithConfig = () => {
-    const config = vscode.workspace.getConfiguration("hourlyMathCode");
-    const minutes = clamp(config.get("intervalMinutes", 60), 1, 75);
-
-    if (intervalHandle) {
-      clearInterval(intervalHandle);
-    }
-
-    // Run immediately
-    runHourlyChallenge(terminal, context, config);
-
-    // Schedule based on radius (minutes)
-    intervalHandle = setInterval(() => {
-      runHourlyChallenge(terminal, context, config);
-    }, minutes * 60 * 1000);
-  };
-
-  runWithConfig();
-
-  vscode.workspace.onDidChangeConfiguration(e => {
-    if (e.affectsConfiguration("hourlyMathCode")) {
-      runWithConfig();
-    }
-  });
-}
-
-async function runHourlyChallenge(terminal, context, config) {
-  playAudio(context, "chime.mp3");
-
-  vscode.window
-    .showInformationMessage(
-      "HouseLearning Hourly Math Code\nCheck the terminal for your hourly math problem!",
-      "Ok",
-      "Terminal"
-    )
-    .then(selection => {
-      if (selection === "Terminal") {
-        terminal.show();
-      }
-    });
-
-  terminal.show();
-  await startMathLoop(terminal, context, config);
-}
-
-async function startMathLoop(terminal, context, config) {
-  const engineConfig = {
-    level: clamp(config.get("mathLevel", 3), 1, 5),
-    operations: normalizeOperations(config.get("operations", ["+", "-", "x", "/"]))
-  };
-
-  const problem = generateProblem(engineConfig);
-
-  terminal.sendText(">>Math time!");
-  terminal.sendText(
-    `>>What is {${problem.a} ${problem.op} ${problem.b}}?`
+  audioPanel = vscode.window.createWebviewPanel(
+    "hourlyMathAudio",
+    "Hourly Math Audio Engine",
+    { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+    { enableScripts: true }
   );
-  terminal.sendText(">>Answer: _");
 
-  while (true) {
-    const answer = await vscode.window.showInputBox({
-      prompt: `What is ${problem.a} ${problem.op} ${problem.b}? (type 'quit' to exit)`
-    });
+  audioPanel.webview.html = `
+    <html>
+      <body>
+        <script>
+          const vscode = acquireVsCodeApi();
+          window.addEventListener('message', event => {
+            const file = event.data.file;
+            const audio = new Audio(file);
+            audio.play();
+          });
+        </script>
+      </body>
+    </html>
+  `;
 
-    if (answer === undefined) {
-      // User cancelled input box; just ask again
-      continue;
-    }
+  return audioPanel;
+}
 
-    const trimmed = answer.trim();
+function playAudio(context, file) {
+  const panel = ensureAudioPanel(context);
+  const fileUri = panel.webview.asWebviewUri(
+    vscode.Uri.joinPath(context.extensionUri, "media", file)
+  );
+  panel.webview.postMessage({ file: fileUri.toString() });
+}
 
-    if (trimmed.toLowerCase() === "quit") {
-      vscode.window.showInformationMessage(
-        "Quitting this problem... to disable this extension, go to the extension pane.",
-        "Ok",
-        "Extensions"
-      );
-      return;
-    }
+// -----------------------------
+// PSEUDOTERMINAL ENGINE
+// -----------------------------
+class MathTerminal {
+  constructor() {
+    this.writeEmitter = new vscode.EventEmitter();
+    this.onDidWrite = this.writeEmitter.event;
+    this.onDidClose = new vscode.EventEmitter().event;
+  }
 
-    const numeric = Number(trimmed);
-    if (!Number.isFinite(numeric)) {
-      terminal.sendText("Please enter a valid number or 'quit'.");
-      continue;
-    }
+  open() {
+    this.write("Hourly Math Code Ready.\r\n");
+  }
 
-    if (Math.abs(numeric - problem.answer) < 1e-9) {
-      playAudio(context, "chime-correct.mp3");
-      terminal.sendText("Correct! +1 for you.");
-      return;
-    } else {
-      playAudio(context, "chime-bad.mp3");
-      terminal.sendText("Incorrect! Try again.");
-      // New problem, loop again
-      return startMathLoop(terminal, context, config);
-    }
+  close() {}
+
+  write(text) {
+    this.writeEmitter.fire(text);
   }
 }
 
-/**
- * HL‑VSMathEngine
- * Levels:
- *  1: small positive integers, +/-
- *  2: up to 2-digit, +/-, x
- *  3: up to 3-digit, +/-, x, /
- *  4: up to 4-digit, all ops, division with integer result
- *  5: up to 5-digit, all ops, division with integer result and larger ranges
- */
-function generateProblem({ level, operations }) {
+// -----------------------------
+// HL‑VSMathEngine
+// -----------------------------
+function generateProblem(level, operations) {
   const ops = operations.length ? operations : ["+", "-", "x", "/"];
   const op = ops[Math.floor(Math.random() * ops.length)];
 
   let max;
   switch (level) {
-    case 1:
-      max = 20;
-      break;
-    case 2:
-      max = 99;
-      break;
-    case 3:
-      max = 999;
-      break;
-    case 4:
-      max = 9999;
-      break;
-    case 5:
-    default:
-      max = 99999;
-      break;
+    case 1: max = 20; break;
+    case 2: max = 99; break;
+    case 3: max = 999; break;
+    case 4: max = 9999; break;
+    case 5: max = 99999; break;
+    default: max = 999;
   }
 
   let a, b, answer;
 
   if (op === "/") {
-    // Ensure integer division
     b = randomInt(1, Math.max(2, Math.floor(max / 10)));
     const quotient = randomInt(1, Math.max(2, Math.floor(max / b)));
     a = b * quotient;
@@ -152,17 +90,9 @@ function generateProblem({ level, operations }) {
     a = randomInt(0, max);
     b = randomInt(0, max);
     switch (op) {
-      case "+":
-        answer = a + b;
-        break;
-      case "-":
-        answer = a - b;
-        break;
-      case "x":
-        answer = a * b;
-        break;
-      default:
-        throw new Error(`Unsupported operation: ${op}`);
+      case "+": answer = a + b; break;
+      case "-": answer = a - b; break;
+      case "x": answer = a * b; break;
     }
   }
 
@@ -173,29 +103,98 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+// -----------------------------
+// MAIN EXTENSION LOGIC
+// -----------------------------
+let intervalHandle = null;
+
+function activate(context) {
+  const mathTerminal = new MathTerminal();
+  const terminal = vscode.window.createTerminal({
+    name: "Hourly Math Code",
+    pty: mathTerminal
+  });
+
+  const runWithConfig = () => {
+    const config = vscode.workspace.getConfiguration("hourlyMathCode");
+    const minutes = Math.min(75, Math.max(1, config.get("intervalMinutes", 60)));
+
+    if (intervalHandle) clearInterval(intervalHandle);
+
+    runChallenge(context, mathTerminal, config);
+
+    intervalHandle = setInterval(() => {
+      runChallenge(context, mathTerminal, config);
+    }, minutes * 60 * 1000);
+  };
+
+  runWithConfig();
+
+  vscode.workspace.onDidChangeConfiguration(e => {
+    if (e.affectsConfiguration("hourlyMathCode")) runWithConfig();
+  });
 }
 
-function normalizeOperations(ops) {
-  if (!Array.isArray(ops)) return ["+", "-", "x", "/"];
-  const allowed = new Set(["+", "-", "x", "/"]);
-  return ops.filter(o => allowed.has(o));
+async function runChallenge(context, mathTerminal, config) {
+  playAudio(context, "chime.mp3");
+
+  vscode.window.showInformationMessage(
+    "HouseLearning Hourly Math Code\nCheck the terminal for your hourly math problem!",
+    "Ok",
+    "Terminal"
+  ).then(sel => {
+    if (sel === "Terminal") {
+      vscode.window.terminals.find(t => t.name === "Hourly Math Code")?.show();
+    }
+  });
+
+  await startMathLoop(context, mathTerminal, config);
 }
 
-function playAudio(context, file) {
-  const audioPath = path.join(context.extensionPath, "media", file);
-  // VS Code has no direct audio API; open externally to play sound.
-  vscode.env.openExternal(vscode.Uri.file(audioPath));
-}
+async function startMathLoop(context, mathTerminal, config) {
+  const level = config.get("mathLevel", 3);
+  const operations = config.get("operations", ["+", "-", "x", "/"]);
 
-function deactivate() {
-  if (intervalHandle) {
-    clearInterval(intervalHandle);
+  const problem = generateProblem(level, operations);
+
+  mathTerminal.write(`\r\n>> Math time!\r\n`);
+  mathTerminal.write(`>> What is {${problem.a} ${problem.op} ${problem.b}}?\r\n`);
+  mathTerminal.write(`>> Answer: _\r\n`);
+
+  while (true) {
+    const answer = await vscode.window.showInputBox({
+      prompt: `What is ${problem.a} ${problem.op} ${problem.b}? (type 'quit' to exit)`
+    });
+
+    if (!answer) continue;
+
+    if (answer.toLowerCase() === "quit") {
+      vscode.window.showInformationMessage(
+        "Quitting this problem... to disable this extension, go to the extension pane.",
+        "Ok",
+        "Extensions"
+      );
+      return;
+    }
+
+    const numeric = Number(answer);
+    if (!Number.isFinite(numeric)) {
+      mathTerminal.write(">> Please enter a valid number.\r\n");
+      continue;
+    }
+
+    if (Math.abs(numeric - problem.answer) < 1e-9) {
+      playAudio(context, "chime-correct.mp3");
+      mathTerminal.write(">> Correct! +1 for you.\r\n");
+      return;
+    } else {
+      playAudio(context, "chime-bad.mp3");
+      mathTerminal.write(">> Incorrect! Try again.\r\n");
+      return startMathLoop(context, mathTerminal, config);
+    }
   }
 }
 
-module.exports = {
-  activate,
-  deactivate
-};
+function deactivate() {}
+
+module.exports = { activate, deactivate };
