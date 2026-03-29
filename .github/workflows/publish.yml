@@ -1,10 +1,10 @@
-name: Publish Hourly Math Code to Marketplace
+name: Publish VS Code Extension
 
 on:
-  workflow_dispatch:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 jobs:
   publish:
