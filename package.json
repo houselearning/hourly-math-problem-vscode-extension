@@ -2,7 +2,7 @@
   "name": "hourly-math-code",
   "displayName": "Hourly Math Code",
   "description": "HouseLearning Hourly Math Code: periodic math challenges with audio, toast, and terminal interaction.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "HouseLearningorg",
   "icon": "icon.png",
   "engines": {
