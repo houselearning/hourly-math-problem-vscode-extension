@@ -1,0 +1,16 @@
+{
+  "name": "hourly-math-code",
+  "displayName": "Hourly Math Code",
+  "description": "Every hour, get a HouseLearning math challenge with audio, toast, and terminal interaction.",
+  "version": "0.0.1",
+  "publisher": "houselearning",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "activationEvents": ["*"],
+  "main": "./extension.js",
+  "contributes": {},
+  "scripts": {
+    "package": "vsce package"
+  }
+}
