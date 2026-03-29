@@ -4,6 +4,7 @@
   "description": "HouseLearning Hourly Math Code: periodic math challenges with audio, toast, and terminal interaction.",
   "version": "0.1.1",
   "publisher": "HouseLearningorg",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
