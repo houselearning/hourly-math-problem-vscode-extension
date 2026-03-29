@@ -49,6 +49,6 @@
     "publish": "vsce publish"
   },
   "devDependencies": {
-    "vsce": "^3.0.0"
+    "@vscode/vsce": "latest"
   }
 }
